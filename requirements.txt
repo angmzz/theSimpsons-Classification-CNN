@@ -1,0 +1,15 @@
+torch
+torchvision
+pytorch-lightning
+lightning
+torchinfo
+torchmetrics
+grad-cam
+optuna
+matplotlib
+jupyter
+ipykernel
+scikit-learn
+tqdm
+pandas
+seaborn

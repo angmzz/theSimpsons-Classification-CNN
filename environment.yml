@@ -1,0 +1,22 @@
+name: CNN-ENV
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - torch
+      - torchvision
+      - pytorch-lightning
+      - lightning
+      - torchinfo
+      - torchmetrics
+      - grad-cam
+      - jupyter
+      - ipykernel
+      - scikit-learn
+      - tqdm
+      - pandas
+      - seaborn
+      - matplotlib
+      - optuna
