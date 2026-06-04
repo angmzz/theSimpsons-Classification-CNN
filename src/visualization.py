@@ -115,7 +115,7 @@ def plot_gradcam_samples(model, dataloader, preds, targets, target_layer, idx_to
         # Pero esto asegura que la visualización reciba los tipos correctos
         visualization = show_cam_on_image(img_rgb, grayscale_cam, use_rgb=True)
         
-        title_text = f"Pred: {idx_to_class[pred_label]}\\nReal: {idx_to_class[true_label]}"
+        title_text = f"Pred: {idx_to_class[pred_label]}\nReal: {idx_to_class[true_label]}"
         color = 'green' if pred_label == true_label else 'red'
         
         # Fila 1: Imagen Original
@@ -142,7 +142,7 @@ def evaluate_model(model, trainer, datamodule, history, target_layer, title="CNN
     4. Imprime Matriz de Confusión
     5. Imprime grilla de Grad-CAM
     """
-    print(f"\\n{'='*50}\\nEvaluando {title}\\n{'='*50}")
+    print(f"\n{'='*50}\nEvaluando {title}\n{'='*50}")
     
     # 1. Test
     trainer.test(model, datamodule=datamodule)
@@ -157,11 +157,11 @@ def evaluate_model(model, trainer, datamodule, history, target_layer, title="CNN
     
     # Info de clases
     active_classes = sorted(list(set(targets)))
-    idx_to_class = {v: k for k, v in datamodule.test_ds.class_to_idx.items()}
+    idx_to_class = {i: k for i, k in enumerate(datamodule.classes)}
     class_names = [idx_to_class[i] for i in active_classes]
     
-    print("\\n--- Reporte de Clasificación ---")
-    print(classification_report(targets, preds, labels=active_classes, target_names=class_names))
+    print("\n--- Reporte de Clasificación ---")
+    print(classification_report(targets, preds, labels=active_classes, target_names=class_names, zero_division=0))
     
     # 4. Matriz
     plot_confusion_matrix(targets, preds, active_classes, class_names, title=title)

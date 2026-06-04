@@ -6,18 +6,19 @@ import torchmetrics
 class SimpsonsModule(L.LightningModule):
     """Lightning wrapper que orquesta el entrenamiento de la CNN"""
     
-    def __init__(self, cfg, model: torch.nn.Module, class_weights=None):
+    def __init__(self, cfg, model: torch.nn.Module, num_classes: int, class_weights=None):
         super().__init__()
         self.save_hyperparameters(ignore=['model'])
         self.cfg = cfg
         self.model = model
         self.class_weights = class_weights
+        self.num_classes = num_classes
         
         # Metricas 
 
         # Usar avg weighted y no macro porque en train hay clases que no hay en test
         # Si predice clases ausentes tendrán soporte=0, anulando su penalizacion matemática en el promedio
-        metrics_kws = {"task": "multiclass", "num_classes": cfg.num_classes, "average": "weighted"}
+        metrics_kws = {"task": "multiclass", "num_classes": self.num_classes, "average": "macro"}
         
         # training
         self.train_acc = torchmetrics.Accuracy(**metrics_kws)
@@ -70,7 +71,7 @@ class SimpsonsModule(L.LightningModule):
         self.val_f1(preds, y)
         self.log("val/loss", loss, prog_bar=True)
         self.log("val/acc", self.val_acc, prog_bar=True, on_epoch=True)
-        self.log("val/f1_weighted", self.val_f1, prog_bar=True, on_epoch=True)
+        self.log("val/f1_macro", self.val_f1, prog_bar=True, on_epoch=True)
         return loss
 
     def test_step(self, batch, batch_idx):
@@ -93,7 +94,7 @@ class SimpsonsModule(L.LightningModule):
 
         self.log("test/loss", loss)
         self.log("test/acc", self.test_acc, on_epoch=True)
-        self.log("test/f1_weighted", self.test_f1, on_epoch=True)
+        self.log("test/f1_macro", self.test_f1, on_epoch=True)
         self.log("test/precision", self.test_precision, on_epoch=True)
         self.log("test/recall", self.test_recall, on_epoch=True)
         return loss

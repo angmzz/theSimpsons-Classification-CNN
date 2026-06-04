@@ -7,6 +7,7 @@ from torch.utils.data import DataLoader, Dataset
 import lightning as L
 import torchvision.datasets as datasets
 from torchvision.transforms import v2
+from sklearn.model_selection import train_test_split
 
 class SimpsonsDataset(Dataset):
     """Wrapper para aplicar transformaciones sobre una lista de samples usando PIL y torchvision."""
@@ -33,57 +34,36 @@ class CustomImageFolder(datasets.ImageFolder):
         if not classes:
             raise FileNotFoundError(f"No se encontraron carpetas de clases en {directory}")
         
-        # Saltar carpetas vacias
+        # Saltar carpetas vacias o con muy pocas imágenes (menos de 50)
+        min_samples = 50
         valid_classes = []
         for c in classes:
             class_dir = os.path.join(directory, c)
-            if any(os.scandir(class_dir)):
+            # Contar archivos
+            num_images = sum(1 for entry in os.scandir(class_dir) if entry.is_file())
+            if num_images >= min_samples:
                 valid_classes.append(c)
                 
         class_to_idx = {cls_name: i for i, cls_name in enumerate(valid_classes)}
         return valid_classes, class_to_idx
 
-class SimpsonsTestDataset(Dataset):
-    """Clase de personalizada para el set de prueba que no tiene subcarpetas"""
-    def __init__(self, directory, class_to_idx, transform=None):
-        self.directory = Path(directory)
-        self.class_to_idx = class_to_idx
-        self.transform = transform
-        
-        self.samples = []
-        for file_path in self.directory.glob("*.jpg"):
-            # extraer la clase del nombre del archivo (ej: abraham_grampa_simpson_0.jpg)
-            class_name = "_".join(file_path.stem.split("_")[:-1])
-            if class_name in self.class_to_idx:
-                self.samples.append((str(file_path), self.class_to_idx[class_name]))
-                
-    def __len__(self):
-        return len(self.samples)
-        
-    def __getitem__(self, idx):
-        path, label = self.samples[idx]
-        image = Image.open(path).convert('RGB')
-        
-        if self.transform:
-            image = self.transform(image)
-            
-        return image, label
 
 class SimpsonsDataModule(L.LightningDataModule):
     def __init__(self, cfg, train_transforms=None, val_transforms=None):
         super().__init__()
         self.cfg = cfg
         self.data_dir = Path(cfg.data_dir)
-        # directorio train
+        # Directorio único de base de datos
         self.train_dir = self.data_dir / "simpsons"
-        # directorio test
-        self.test_dir = self.data_dir / "simpsons_testset"
         
         size = self.cfg.image_size
         
         # Si el notebook inyecta transformaciones, las usamos
         self.train_transforms = train_transforms if train_transforms is not None else v2.Compose([
             v2.Resize((size, size)),
+            v2.RandomHorizontalFlip(p=0.5),
+            v2.RandomRotation(degrees=15),
+            v2.ColorJitter(brightness=0.2, contrast=0.2),
             v2.ToImage(),
             v2.ToDtype(torch.float32, scale=True),
             v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
@@ -96,40 +76,42 @@ class SimpsonsDataModule(L.LightningDataModule):
             v2.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ])
         self.classes = []
-        self.num_classes = cfg.num_classes
+        self.num_classes = 0 # Se calculará dinámicamente en setup()
 
     def prepare_data(self):
-        """Descomprime los archivos"""
-        for archive_name, extract_path in [("simpsons_train.tar.gz", self.train_dir), ("simpsons_test.tar.gz", self.test_dir)]:
-            archive_path = self.data_dir / archive_name
-            if archive_path.exists() and not extract_path.exists():
-                print(f"Extrayendo {archive_name}")
-                with tarfile.open(archive_path, "r:gz") as tar:
-                    tar.extractall(path=self.data_dir)
-                print(f"{archive_name} extraido en {self.data_dir}")
+        """Descomprime el archivo """
+        archive_name, extract_path = "simpsons_train.tar.gz", self.train_dir
+        archive_path = self.data_dir / archive_name
+        if archive_path.exists() and not extract_path.exists():
+            print(f"Extrayendo {archive_name}")
+            with tarfile.open(archive_path, "r:gz") as tar:
+                tar.extractall(path=self.data_dir)
+            print(f"{archive_name} extraido en {self.data_dir}")
 
     def setup(self, stage=None):
-        # CustomImageFolder ignora carpetas vacias
-        full_train_ds = CustomImageFolder(self.train_dir)
-        self.classes = full_train_ds.classes
+        # Cargamos toda la base de datos (se ignoran carpetas vacías)
+        full_ds = CustomImageFolder(self.train_dir)
+        self.classes = full_ds.classes
         self.num_classes = len(self.classes)
-        # Actualizamos config
-        self.cfg.num_classes = self.num_classes 
+        print(f"\n[INFO] Escaneo completado: Se encontraron {self.num_classes} clases válidas (con 50+ imágenes).")
 
-        # Split train/val
-        train_size = int(0.8 * len(full_train_ds))
-        val_size = len(full_train_ds) - train_size
-        
-        train_subset, val_subset = torch.utils.data.random_split(
-            full_train_ds, [train_size, val_size], generator=torch.Generator().manual_seed(42)
+        # Extraemos targets (y) para realizar un split estratificado
+        samples = full_ds.samples
+        targets = [label for _, label in samples]
+
+        # 1. Separamos 80% para (Train+Val) y 20% para Test intacto
+        train_val_samples, test_samples, train_val_targets, _ = train_test_split(
+            samples, targets, test_size=0.20, random_state=42, stratify=targets
         )
-        
-        train_samples = [full_train_ds.samples[i] for i in train_subset.indices]
-        val_samples = [full_train_ds.samples[i] for i in val_subset.indices]
+
+        # 2. Del 80% restante, sacamos un 10% para Validación
+        train_samples, val_samples, _, _ = train_test_split(
+            train_val_samples, train_val_targets, test_size=0.10, random_state=42, stratify=train_val_targets
+        )
                 
         self.train_ds = SimpsonsDataset(train_samples, transform=self.train_transforms)
         self.val_ds = SimpsonsDataset(val_samples, transform=self.val_test_transforms)
-        self.test_ds = SimpsonsTestDataset(self.test_dir, full_train_ds.class_to_idx, transform=self.val_test_transforms)
+        self.test_ds = SimpsonsDataset(test_samples, transform=self.val_test_transforms)
 
     def train_dataloader(self):
         return DataLoader(
