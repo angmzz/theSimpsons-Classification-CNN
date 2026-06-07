@@ -15,9 +15,6 @@ class SimpsonsModule(L.LightningModule):
         self.num_classes = num_classes
         
         # Metricas 
-
-        # Usar avg weighted y no macro porque en train hay clases que no hay en test
-        # Si predice clases ausentes tendrán soporte=0, anulando su penalizacion matemática en el promedio
         metrics_kws = {"task": "multiclass", "num_classes": self.num_classes, "average": "macro"}
         
         # training

@@ -21,7 +21,7 @@ def get_all_preds(model, dataloader):
     return np.array(all_preds), np.array(all_targets)
 
 def plot_training_metrics(history, title='Métricas de Entrenamiento'):
-    if not history:
+    if history is None or history.empty:
         print("Historial vacío. No hay métricas para graficar.")
         return
         
@@ -90,7 +90,7 @@ def plot_gradcam_samples(model, dataloader, preds, targets, target_layer, idx_to
     
     fig, axes = plt.subplots(2, max(len(selected_indices), 1), figsize=(4 * len(selected_indices), 8))
     if len(selected_indices) == 1:
-        axes = np.array([axes]).T # Asegurar que sea 2D
+        axes = np.array([axes]).T 
         
     mean = np.array([0.485, 0.456, 0.406])
     std = np.array([0.229, 0.224, 0.225])
@@ -99,20 +99,16 @@ def plot_gradcam_samples(model, dataloader, preds, targets, target_layer, idx_to
     for idx in selected_indices:
         img_tensor, true_label = dataloader.dataset[idx]
         pred_label = preds[idx]
-        
-        # Copiar tensor y forzar gradientes
+
         img_input = img_tensor.unsqueeze(0).to(model.device)
         img_input.requires_grad_(True)
         
         grayscale_cam = cam(input_tensor=img_input, targets=None)[0, :]
         
-        # Denormalizar cuidadosamente
         img_np = img_tensor.cpu().numpy().transpose((1, 2, 0))
         img_rgb = std * img_np + mean
         img_rgb = np.clip(img_rgb, 0, 1).astype(np.float32)
         
-        # Si el mapa sale completamente azul, es posible que el modelo no tenga gradientes útiles
-        # Pero esto asegura que la visualización reciba los tipos correctos
         visualization = show_cam_on_image(img_rgb, grayscale_cam, use_rgb=True)
         
         title_text = f"Pred: {idx_to_class[pred_label]}\nReal: {idx_to_class[true_label]}"

@@ -104,9 +104,9 @@ class SimpsonsDataModule(L.LightningDataModule):
             samples, targets, test_size=0.20, random_state=42, stratify=targets
         )
 
-        # 2. Del 80% restante, sacamos un 10% para Validación
+        # 2. Del 80% restante, sacamos un 12.5% (que equivale al 10% del total) para Validación
         train_samples, val_samples, _, _ = train_test_split(
-            train_val_samples, train_val_targets, test_size=0.10, random_state=42, stratify=train_val_targets
+            train_val_samples, train_val_targets, test_size=0.125, random_state=42, stratify=train_val_targets
         )
                 
         self.train_ds = SimpsonsDataset(train_samples, transform=self.train_transforms)
